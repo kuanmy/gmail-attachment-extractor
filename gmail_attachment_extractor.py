@@ -1,4 +1,5 @@
 import base64
+import csv
 import os
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -6,11 +7,16 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+
 # If modifying these scopes, delete the file token.json.
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
+
 class GmailAttachmentExtractor:
-    def __init__(self) -> None:
+    def __init__(self, output_dir: str = '') -> None:
+        self.output_dir = output_dir
+        self.error_log_path = os.path.join(self.output_dir, 'error/log.csv')
+        self.record_log_path = os.path.join(self.output_dir, 'record/log.txt')
         self.__set_creds()
         self.service = build('gmail', 'v1', credentials=self.creds)
 
@@ -30,7 +36,7 @@ class GmailAttachmentExtractor:
         return messages
 
 
-    def store_message_attachments(self, message_id: str, output_dir: str = '') -> None:
+    def store_message_attachments(self, message_id: str) -> None:
         """Get and store attachments from the message of specified id."""
         try:
             message = self.service.users().messages().get(userId='me', id=message_id, fields='payload(headers,parts)').execute()
@@ -46,10 +52,13 @@ class GmailAttachmentExtractor:
                         atch_data = atch['data']
                     atch_content = base64.urlsafe_b64decode(atch_data.encode('UTF-8'))
 
-                    output_atch_path = os.path.join(output_dir, part['filename'])
+                    output_atch_path = os.path.join(self.output_dir, part['filename'])
                     self.__store_attachment(output_atch_path, atch_content)
 
+            self.__write_record_log(message_id)
+
         except HttpError as error:
+            self.__write_error_log([message_id, error])
             print('An error occurred: %s' % error)  
     
 
@@ -78,6 +87,21 @@ class GmailAttachmentExtractor:
         os.makedirs(os.path.dirname(output_atch_path), exist_ok=True)
         with open(output_atch_path, 'wb') as f:
             f.write(atch_content)
+
+    
+    def __write_error_log(self, data):
+        """ Write error log as csv """
+        os.makedirs(os.path.dirname(self.error_log_path), exist_ok=True)
+        with open(self.error_log_path, "a", newline='\n') as csv_file:
+            writer = csv.writer(csv_file, delimiter=',')
+            writer.writerow(data)
+
+
+    def __write_record_log(self, data):
+        """ Write record log """
+        os.makedirs(os.path.dirname(self.record_log_path), exist_ok=True)
+        with open(self.record_log_path, 'a') as f:
+            f.write(data + '\n')
 
 
 if __name__ == '__main__':
