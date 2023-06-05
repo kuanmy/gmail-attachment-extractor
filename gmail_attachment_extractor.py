@@ -36,6 +36,21 @@ class GmailAttachmentExtractor:
         return messages
 
 
+    def get_processed_message_ids(self) -> list:
+        """ Get processed message ids (messages where attachments had previously been extracted) """
+        message_ids = []
+        if os.path.exists(self.record_log_path):
+            with open(self.record_log_path) as f:
+                message_ids = f.read().splitlines()
+        return message_ids
+
+
+    def get_unprocessed_message_ids(self, all_message_ids: list) -> list:
+        """ Get unprocessed message ids among the given message ids """
+        s = set(self.get_processed_message_ids())
+        return [x for x in all_message_ids if x not in s]
+
+
     def store_message_attachments(self, message_id: str) -> None:
         """Get and store attachments from the message of specified id."""
         try:
@@ -106,6 +121,7 @@ class GmailAttachmentExtractor:
 
 if __name__ == '__main__':
     extractor = GmailAttachmentExtractor()
-    message_ids = extractor.get_message_ids()
+    all_message_ids = extractor.get_message_ids()
+    message_ids = extractor.get_unprocessed_message_ids(all_message_ids)
     for message_id in message_ids:
         extractor.store_message_attachments(message_id)
