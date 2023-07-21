@@ -6,6 +6,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from typing import List
 
 from attachment import Attachment
 from message import Message
@@ -29,7 +30,7 @@ class GmailService:
         return label_ids
 
 
-    def get_message(self, message_id: str) -> Message:
+    def get_message(self, message_id: str) -> List[Message]:
         """Get and store attachments from the message of specified id."""
         try:
             message = self.service.users().messages().get(userId='me', id=message_id, fields='payload(headers,parts)').execute()
@@ -75,7 +76,7 @@ class GmailService:
             print('An error occurred: %s' % error)
 
 
-    def get_message_ids(self, query: str = '') -> list:
+    def get_message_ids(self, query: str = '') -> List[str]:
         """Get message ids that fulfill the specified query condition, and comes with attachments """
         query += ' has:attachment'
         results = self.service.users().messages().list(userId='me', q=query, fields='messages(id),nextPageToken').execute()
