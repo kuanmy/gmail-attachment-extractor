@@ -1,10 +1,12 @@
 import os
+import argparse
 
 from gmail_service import GmailService
 from logger import CsvLogger, TxtLogger
 from typing import List
 
-def extract_gmail_attachments(output_atch_dir: str = '', output_error_log_path: str = 'error_log', output_record_log_path: str = 'record_log', processed_record_log_paths: List[str] = []) -> None:
+
+def extract_gmail_attachments(output_atch_dir: str = '', output_record_log_path: str = 'record_log', output_error_log_path: str = 'error_log', processed_record_log_paths: List[str] = []) -> None:
     service = GmailService()
     all_message_ids = service.get_message_ids()
     message_ids = all_message_ids
@@ -26,4 +28,14 @@ def extract_gmail_attachments(output_atch_dir: str = '', output_error_log_path: 
             for attachment in message.attachments:
                 attachment.save(dir=os.join(output_atch_dir, module, ref_no))
             TxtLogger.write(output_record_log_path + '.txt', message.id)
-    
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-o', '--output-atch-dir', dest='output_atch_dir', default='')
+    parser.add_argument('--output-record-log-path', dest='output_record_log_path', default='record_log')
+    parser.add_argument('--output-error-log-path', dest='output_error_log_path', default='error_log')
+    parser.add_argument('--processed-record-log-path', dest='processed_record_log_path', default=[])
+    args = parser.parse_args()
+
+    extract_gmail_attachments(parser.output_atch_dir, parser.output_record_log_path, parser.output_error_log_path, parser.processed_record_log_path)
