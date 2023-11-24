@@ -22,12 +22,15 @@ def extract_gmail_attachments(output_atch_dir: str = '', output_record_log_path:
 
         module_ref_no = message.get_module_ref_no()
         if module_ref_no is None:
+            module = ref_no = 'Uncategorized'
             CsvLogger.write(output_error_log_path + '.csv', [message.id, "Module Ref No not found for subject: " + message.subject])
         else:
             (module, ref_no) = module_ref_no
-            for attachment in message.attachments:
-                attachment.save(dir=os.join(output_atch_dir, module, ref_no))
-            TxtLogger.write(output_record_log_path + '.txt', message.id)
+            if module == 'Payment Service':
+                module = 'PMS'
+        for attachment in message.attachments:
+            attachment.save(dir=os.path.join(output_atch_dir, module, ref_no))
+        TxtLogger.write(output_record_log_path + '.txt', message.id)
 
 
 if __name__ == '__main__':
@@ -38,4 +41,4 @@ if __name__ == '__main__':
     parser.add_argument('--processed-record-log-path', dest='processed_record_log_path', default=[])
     args = parser.parse_args()
 
-    extract_gmail_attachments(parser.output_atch_dir, parser.output_record_log_path, parser.output_error_log_path, parser.processed_record_log_path)
+    extract_gmail_attachments(args.output_atch_dir, args.output_record_log_path, args.output_error_log_path, args.processed_record_log_path)

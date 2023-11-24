@@ -22,7 +22,7 @@ class GmailService:
         self.service = build('gmail', 'v1', credentials=self.creds)
 
     
-    def get_label_ids(self):
+    def get_label_ids(self) -> List[str]:
         results = self.service.users().labels().list(userId='me').execute()
         label_ids = []
         if 'labels' in results:
@@ -30,8 +30,8 @@ class GmailService:
         return label_ids
 
 
-    def get_message(self, message_id: str) -> List[Message]:
-        """Get and store attachments from the message of specified id."""
+    def get_message(self, message_id: str) -> Message:
+        """Get message of specified id and its attachments."""
         try:
             message = self.service.users().messages().get(userId='me', id=message_id, fields='payload(headers,parts)').execute()
             payload = message['payload']

@@ -16,22 +16,22 @@ class Message:
 
     
     def get_module_ref_no(self) -> Optional[Tuple[str, str]]:
-        module_ref_no = None
+        patterns = [
+            # 1st pattern: [moduleShortForm] #[refNo]
+            (r"(RQ|PR|PO|PRQ|Payment Service) #\S*", " #"),
+            # 2nd pattern: [moduleShortForm] Approval of [refNo]
+            (r"(RQ|PR|PO|PRQ) Approval of \S*", " Approval of "),
+            # 3rd pattern: [moduleShortForm] Approval [refNo]
+            (r"(RQ|PR|PO|PRQ) Approval \S*", " Approval "),
+            # 4th pattern: [moduleShortForm] Reviewer [refNo]
+            (r"(RQ|PR|PO|PRQ) Reviewer \S*", " Reviewer ")
+        ]
 
-        # 1st pattern: [moduleShortForm] #[refNo]
-        module_ref_no = re.search(r"(RQ|PR|PO|PRQ) #\S*", self.subject)
-        if module_ref_no is not None:
-            module_ref_no = module_ref_no.group().split(" #")
+        for pattern, split_key in patterns:
+            matching_substring = re.search(pattern, self.subject)
+            if matching_substring is not None:
+                module_ref_no = matching_substring.group().split(split_key)
+                return tuple(module_ref_no)
 
-        # 2nd pattern: [moduleShortForm] Approval [refNo]
-        module_ref_no = re.search(r"(RQ|PR|PO|PRQ) Approval \S*", self.subject)
-        if module_ref_no is not None:
-            module_ref_no = module_ref_no.group().split(" Approval ")
-
-        # 3rd pattern: [moduleShortForm] Reviewer [refNo]
-        module_ref_no = re.search(r"(RQ|PR|PO|PRQ) Reviewer \S*", self.subject)
-        if module_ref_no is not None:
-            module_ref_no = module_ref_no.group().split(" Reviewer ")
-            
-        return tuple(module_ref_no) if module_ref_no is not None else None
+        return None
 

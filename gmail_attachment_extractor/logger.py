@@ -22,7 +22,9 @@ class TxtLogger(Logger):
 
     @staticmethod
     def write(log_file_path: str, data) -> None:
-        os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+        dirname = os.path.dirname(log_file_path)
+        if os.path.isdir(dirname):
+            os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
         with open(log_file_path, 'a') as f:
             f.write(data + '\n')
 
@@ -40,7 +42,9 @@ class CsvLogger(Logger):
 
     @staticmethod
     def write(log_file_path: str, data) -> None:
-        os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+        dirname = os.path.dirname(log_file_path)
+        if os.path.isdir(dirname):
+            os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
         with open(log_file_path, "a", newline='\n') as f:
             writer = csv.writer(f, delimiter=',')
             writer.writerow(data)
