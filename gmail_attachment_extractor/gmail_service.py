@@ -13,100 +13,172 @@ from message import Message
 
 
 # If modifying these scopes, delete the file token.json.
-SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
 
 class GmailService:
+    """Service class to interact with Gmail API.
+
+    Attributes
+    ----------
+    service: Any
+        Resource object for interacting with the Gmail API. Constructed
+        based on the gmail user credentials configured.
+    """
+
     def __init__(self) -> None:
         self.__set_creds()
-        self.service = build('gmail', 'v1', credentials=self.creds)
+        self.service = build("gmail", "v1", credentials=self.creds)
 
-    
     def get_label_ids(self) -> List[str]:
-        results = self.service.users().labels().list(userId='me').execute()
+        """Get the list of gmail label ids.
+
+        Returns
+        -------
+        List[str]
+            A list of ids of the gmail labels.
+        """
+        results = self.service.users().labels().list(userId="me").execute()
         label_ids = []
-        if 'labels' in results:
-            label_ids = list(map(lambda label: label['id'], results['labels']))
+        if "labels" in results:
+            label_ids = list(map(lambda label: label["id"], results["labels"]))
         return label_ids
 
-
     def get_message(self, message_id: str) -> Message:
-        """Get message of specified id and its attachments."""
+        """Get the gmail message of given id and its attachments.
+
+        Parameters
+        ----------
+        message_id: str
+            Id of the gmail message to get.
+
+        Returns
+        -------
+        Message
+            A Message object.
+        """
         try:
-            message = self.service.users().messages().get(userId='me', id=message_id, fields='payload(headers,parts)').execute()
-            payload = message['payload']
-
-            # Extract message subject from headers
-            subject = ''
-            for header in payload.get('headers', []):
-                if header.get('name').lower() == 'subject':
-                    subject = header.get('value')
-        
-            # Create message object
-            message_obj = Message(
-                id=message_id,
-                subject=subject
+            # Query gmail message from API
+            message = (
+                self.service.users()
+                .messages()
+                .get(userId="me", id=message_id, fields="payload(headers,parts)")
+                .execute()
             )
+            payload = message["payload"]
 
-            # Get message attachments
-            for part in payload.get('parts', []):
-                if part['filename']:
+            # Extract gmail subject from headers
+            subject = ""
+            for header in payload.get("headers", []):
+                if header.get("name").lower() == "subject":
+                    subject = header.get("value")
+
+            # Create Message object
+            message_obj = Message(id=message_id, subject=subject)
+
+            # Get gmail attachments
+            for part in payload.get("parts", []):
+                if part["filename"]:
                     # Get attachment data
-                    if 'data' in part['body']:
-                        atch_data = part['body']['data']
+                    if "data" in part["body"]:
+                        # Can directly get data if already included in body
+                        atch_data = part["body"]["data"]
                     else:
-                        atch_id = part['body']['attachmentId']
-                        atch = self.service.users().messages().attachments().get(userId='me', messageId=message_id, id=atch_id).execute()
-                        atch_data = atch['data']
-                    
-                    # Create attachment object
-                    atch_name = part['filename']
-                    atch_content = base64.urlsafe_b64decode(atch_data.encode('UTF-8'))
-                    atch_obj = Attachment(
-                        filename=atch_name,
-                        file_content=atch_content
-                    )
+                        # Query attachment data from API
+                        atch_id = part["body"]["attachmentId"]
+                        atch = (
+                            self.service.users()
+                            .messages()
+                            .attachments()
+                            .get(userId="me", messageId=message_id, id=atch_id)
+                            .execute()
+                        )
+                        atch_data = atch["data"]
 
-                    # Assign attachment to message object
+                    # Create Attachment object
+                    atch_name = part["filename"]
+                    atch_content = base64.urlsafe_b64decode(atch_data.encode("UTF-8"))
+                    atch_obj = Attachment(filename=atch_name, file_content=atch_content)
+
+                    # Assign Attachment object to Message object
                     message_obj.add_attachment(atch_obj)
 
             return message_obj
 
         except HttpError as error:
-            print('An error occurred: %s' % error)
+            print("An error occurred: %s" % error)
 
+    def get_message_ids(self, query: str = "") -> List[str]:
+        """Get the list of gmail message ids that fulfill the given query condition,
+        and comes with attachments.
 
-    def get_message_ids(self, query: str = '') -> List[str]:
-        """Get message ids that fulfill the specified query condition, and comes with attachments """
-        query += ' has:attachment'
-        results = self.service.users().messages().list(userId='me', q=query, fields='messages(id),nextPageToken').execute()
+        Parameters
+        ----------
+        query: str, Optional
+            Query conditions to filter the gmail message ids with. (default is "").
+
+        Returns
+        -------
+        List[str]
+            List of gmail message ids
+        """
+        # Query gmail message ids from API
+        query += " has:attachment"
+        results = (
+            self.service.users()
+            .messages()
+            .list(userId="me", q=query, fields="messages(id),nextPageToken")
+            .execute()
+        )
         messages = []
-        if 'messages' in results:
-            messages.extend(list(map(lambda msg: msg['id'], results['messages'])))
-        while 'nextPageToken' in results:
-            page_token = results['nextPageToken']
-            results = self.service.users().messages().list(userId='me', q=query, pageToken=page_token, fields='messages(id),nextPageToken').execute()
-            if 'messages' in results:
-                messages.extend(list(map(lambda msg: msg['id'], results['messages'])))
+        if "messages" in results:
+            messages.extend(list(map(lambda msg: msg["id"], results["messages"])))
+
+        # Repeat process if has next page
+        while "nextPageToken" in results:
+            page_token = results["nextPageToken"]
+            results = (
+                self.service.users()
+                .messages()
+                .list(
+                    userId="me",
+                    q=query,
+                    pageToken=page_token,
+                    fields="messages(id),nextPageToken",
+                )
+                .execute()
+            )
+            if "messages" in results:
+                messages.extend(list(map(lambda msg: msg["id"], results["messages"])))
         return messages
 
-
     def __set_creds(self) -> None:
-        """Get and set the credentials for authenticating the Gmail API service """
+        """Set the credentials for authenticating the Gmail API service. Activate
+        gmail authentication flow based on configured user credentials if no
+        token.json found.
+        """
         self.creds = None
-        # The file token.json stores the user's access and refresh tokens, and is
-        # created automatically when the authorization flow completes for the first
-        # time.
-        if os.path.exists('../creds/token.json'):
-            self.creds = Credentials.from_authorized_user_file('../creds/token.json', SCOPES)
-        # If there are no (valid) credentials available, let the user log in.
+        # If token.json exists
+        if os.path.exists("../creds/token.json"):
+            # Initialize credentials from token
+            self.creds = Credentials.from_authorized_user_file(
+                "../creds/token.json", SCOPES
+            )
+
+        # If no valid credentials
         if not self.creds or not self.creds.valid:
+            # If credentials already expired but can be refreshed
             if self.creds and self.creds.expired and self.creds.refresh_token:
+                # Refresh credentials
                 self.creds.refresh(Request())
             else:
-                os.makedirs(os.path.dirname('../creds'), exist_ok=True)
-                flow = InstalledAppFlow.from_client_secrets_file('../creds/credentials.json', SCOPES)
+                os.makedirs(os.path.dirname("../creds"), exist_ok=True)
+                # Activate authentication flow for user to login
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    "../creds/credentials.json", SCOPES
+                )
                 self.creds = flow.run_local_server(port=0)
-            # Save the credentials for the next run
-            with open('../creds/token.json', 'w') as token:
-                token.write(self.creds.to_json())
+
+                # Save the credentials into token.json for the next run
+                with open("../creds/token.json", "w") as token:
+                    token.write(self.creds.to_json())
