@@ -10,3 +10,11 @@
    ```
    pip install -r requirements.txt
    ```
+4. Run program
+   ```
+   python gmail_attachment_extractor.py
+   ```
+   Run with `-h` / `--help` to view available configurations
+   ```
+   python gmail_attachment_extractor.py --help
+   ```
