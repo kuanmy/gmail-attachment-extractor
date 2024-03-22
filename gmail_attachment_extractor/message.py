@@ -1,7 +1,8 @@
 import re
 
-from attachment import Attachment
 from typing import Optional, Tuple
+
+from gmail_attachment_extractor.attachment import Attachment
 
 
 class Message:

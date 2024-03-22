@@ -8,8 +8,8 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from typing import List
 
-from attachment import Attachment
-from message import Message
+from gmail_attachment_extractor.attachment import Attachment
+from gmail_attachment_extractor.message import Message
 
 
 # If modifying these scopes, delete the file token.json.
