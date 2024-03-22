@@ -1,127 +1,115 @@
-import base64
-import csv
 import os
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
+import argparse
+
+from gmail_attachment_extractor import GmailService
+from gmail_attachment_extractor.logger import CsvLogger, TxtLogger
 
 
-# If modifying these scopes, delete the file token.json.
-SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+def extract_gmail_attachments(
+    output_atch_dir: str,
+    output_record_log_path: str,
+    output_error_log_path: str,
+    processed_record_log_path: str,
+) -> None:
+    """Extract gmail attachments.
 
+    The extracted gmail attachments will be stored in the following structure:
+        {output_atch_dir}/
+            {module}/
+                {ref_no}/
+                    {attachment_file}
+            Uncategorized/
+                {attachment_file}
 
-class GmailAttachmentExtractor:
-    def __init__(self, output_dir: str = '') -> None:
-        self.output_dir = output_dir
-        self.error_log_path = os.path.join(self.output_dir, 'error/log.csv')
-        self.record_log_path = os.path.join(self.output_dir, 'record/log.txt')
-        self.__set_creds()
-        self.service = build('gmail', 'v1', credentials=self.creds)
+    Parameters
+    ----------
+    output_atch_dir: str
+        Directory to store the extracted gmail attachment outputs.
+    output_record_log_path: str
+        .txt file path to store the logs of current processing output's gmail records.
+        Log will store the list of gmail ids that are processed in current run.
+    output_error_log_path: str
+        .csv file path to store the logs of gmail attachment extraction errors.
+        Log will store the gmail id + error message if error occurred during extraction process.
+    processed_record_log_path: str
+        .txt file path to store the logs of previously processed gmail records.
+        Log should store the list of gmail ids that were processed in previous runs.
+        Gmails recorded in the log will not be processed again.
+    """
+    service = GmailService()
+    # Get ids of gmail messages that have attachments
+    all_message_ids = service.get_message_ids()
+    message_ids = all_message_ids
 
+    # Filter out previously processed gmail message ids
+    processed_message_ids = TxtLogger.read(processed_record_log_path)
+    processed_message_ids = set(processed_message_ids)
+    message_ids = [
+        message_id
+        for message_id in all_message_ids
+        if message_id not in processed_message_ids
+    ]
 
-    def get_message_ids(self, query: str = '') -> list:
-        """ Get message ids that fulfill the specified query condition, and comes with attachments """
-        query += ' has:attachment'
-        results = self.service.users().messages().list(userId='me', q=query, fields='messages(id),nextPageToken').execute()
-        messages = []
-        if 'messages' in results:
-            messages.extend(list(map(lambda msg: msg['id'], results['messages'])))
-        while 'nextPageToken' in results:
-            page_token = results['nextPageToken']
-            results = self.service.users().messages().list(userId='me', q=query, pageToken=page_token, fields='messages(id),nextPageToken').execute()
-            if 'messages' in results:
-                messages.extend(list(map(lambda msg: msg['id'], results['messages'])))
-        return messages
-
-
-    def get_processed_message_ids(self) -> list:
-        """ Get processed message ids (messages where attachments had previously been extracted) """
-        message_ids = []
-        if os.path.exists(self.record_log_path):
-            with open(self.record_log_path) as f:
-                message_ids = f.read().splitlines()
-        return message_ids
-
-
-    def get_unprocessed_message_ids(self, all_message_ids: list) -> list:
-        """ Get unprocessed message ids among the given message ids """
-        s = set(self.get_processed_message_ids())
-        return [x for x in all_message_ids if x not in s]
-
-
-    def store_message_attachments(self, message_id: str) -> None:
-        """Get and store attachments from the message of specified id."""
-        try:
-            message = self.service.users().messages().get(userId='me', id=message_id, fields='payload(headers,parts)').execute()
-            payload = message['payload']
-
-            for part in payload.get('parts', ''):
-                if part['filename']:
-                    if 'data' in part['body']:
-                        atch_data = part['body']['data']
-                    else:
-                        atch_id = part['body']['attachmentId']
-                        atch = self.service.users().messages().attachments().get(userId='me', messageId=message_id, id=atch_id).execute()
-                        atch_data = atch['data']
-                    atch_content = base64.urlsafe_b64decode(atch_data.encode('UTF-8'))
-
-                    output_atch_path = os.path.join(self.output_dir, part['filename'])
-                    self.__store_attachment(output_atch_path, atch_content)
-
-            self.__write_record_log(message_id)
-
-        except HttpError as error:
-            self.__write_error_log([message_id, error])
-            print('An error occurred: %s' % error)  
-    
-
-    def __set_creds(self) -> None:
-        """ Get and set the credentials for authenticating the Gmail API service """
-        self.creds = None
-        # The file token.json stores the user's access and refresh tokens, and is
-        # created automatically when the authorization flow completes for the first
-        # time.
-        if os.path.exists('token.json'):
-            self.creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-        # If there are no (valid) credentials available, let the user log in.
-        if not self.creds or not self.creds.valid:
-            if self.creds and self.creds.expired and self.creds.refresh_token:
-                self.creds.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-                self.creds = flow.run_local_server(port=0)
-            # Save the credentials for the next run
-            with open('token.json', 'w') as token:
-                token.write(self.creds.to_json())
-
-
-    def __store_attachment(self, output_atch_path: str, atch_content) -> None:
-        """ Store attachment in specified path """
-        os.makedirs(os.path.dirname(output_atch_path), exist_ok=True)
-        with open(output_atch_path, 'wb') as f:
-            f.write(atch_content)
-
-    
-    def __write_error_log(self, data):
-        """ Write error log as csv """
-        os.makedirs(os.path.dirname(self.error_log_path), exist_ok=True)
-        with open(self.error_log_path, "a", newline='\n') as csv_file:
-            writer = csv.writer(csv_file, delimiter=',')
-            writer.writerow(data)
-
-
-    def __write_record_log(self, data):
-        """ Write record log """
-        os.makedirs(os.path.dirname(self.record_log_path), exist_ok=True)
-        with open(self.record_log_path, 'a') as f:
-            f.write(data + '\n')
-
-
-if __name__ == '__main__':
-    extractor = GmailAttachmentExtractor()
-    all_message_ids = extractor.get_message_ids()
-    message_ids = extractor.get_unprocessed_message_ids(all_message_ids)
     for message_id in message_ids:
-        extractor.store_message_attachments(message_id)
+        # Get gmail message
+        message = service.get_message(message_id)
+
+        # Get module and ref no
+        module_ref_no = message.get_module_ref_no()
+        if module_ref_no is None:
+            module = ref_no = "Uncategorized"
+            # Log error
+            CsvLogger.write(
+                output_error_log_path,
+                [message.id, "Module Ref No not found for subject: " + message.subject],
+            )
+        else:
+            (module, ref_no) = module_ref_no
+
+        # Save attachment based on module and ref no
+        for attachment in message.attachments:
+            attachment.save(dir=os.path.join(output_atch_dir, module, ref_no))
+
+        # Log processed gmail message
+        TxtLogger.write(output_record_log_path, message.id)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-o",
+        "--output-atch-dir",
+        dest="output_atch_dir",
+        default="",
+        help="Directory to store the extracted gmail attachment outputs. Default is current directory.",
+    )
+    parser.add_argument(
+        "--output-record-log-path",
+        dest="output_record_log_path",
+        default="record_log.txt",
+        help=".txt file path to store the logs of current processing output's gmail records. Default is record_log.txt",
+    )
+    parser.add_argument(
+        "--output-error-log-path",
+        dest="output_error_log_path",
+        default="error_log.csv",
+        help=".csv file path to store the logs of gmail attachment extraction errors. Default is error_log.csv",
+    )
+    parser.add_argument(
+        "--processed-record-log-path",
+        dest="processed_record_log_path",
+        default="record_log.txt",
+        help=".txt file path to store the logs of previously processed gmail records. \
+            Gmails recorded in the log will not be processed again. Default is record_log.txt",
+    )
+    args = parser.parse_args()
+    extract_gmail_attachments(
+        args.output_atch_dir,
+        args.output_record_log_path,
+        args.output_error_log_path,
+        args.processed_record_log_path,
+    )
+
+
+if __name__ == "__main__":
+    main()
